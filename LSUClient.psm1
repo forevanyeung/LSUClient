@@ -43,6 +43,7 @@ class LenovoPackage {
     [PackageExtractInfo]$Extracter
     [PackageInstallInfo]$Installer
     [bool]$IsApplicable
+    [bool]$IsInstalled
 }
 
 class PackageExtractInfo {
@@ -298,6 +299,71 @@ function Resolve-XMLDependencies {
     $XMLTreeDepth--
 }
 
+function Test-PackageInstalled {
+    Param (
+        $XML
+    )
+
+    switch ($packageXML.Package.DetectInstall.ChildNodes.Name) {
+        _Driver {
+            Write-Verbose "Using driver detection"
+
+            $XMLHWID = $XML._Driver.HardwareID
+            $XMLHWVER_2 = $XML._Driver.Version
+
+            Write-Debug "XML Hardware ID is $XMLHWID"
+            Write-Debug "XML Hardware Version is $XMLHWVER_2"
+
+            # Remove caret from end of version
+            # Convert to semvar to do comparisons later
+            $XMLHWVER = [version]$XMLHWVER_2.Substring(0,$XMLHWVER_2.Length-1)
+
+            # unsure if multiple hardware ids will match, but let's assume so, so create an array
+            $IsUpToDate = @()
+            foreach($hwid in $XMLHWID) {
+                Write-Verbose "Searching for $($hwid.InnerText)"
+                if($pnp = Get-PnpDevice | Where-Object HardwareID -eq $hwid.InnerText) {
+                    Write-Verbose "Matched PNP device. $pnp"
+                    $pnpver = $pnp | Get-PnpDeviceProperty -KeyName DEVPKEY_Device_DriverVersion | Select-Object -expandproperty data
+                    # convert to semvar
+                    $pnpver = [version] $pnpver
+
+                    Write-Verbose "Checking if PNP Version ($pnpver) is greater than or equal to XML Version ($XMLHWVER)"
+                    if($pnpver -ge $XMLHWVER) {
+                        $IsUpToDate += $true
+                    } else {
+                        $IsUpToDate += $false
+                    }
+                }
+            }
+
+            # if at least one returns false, assume it can be updated
+            if(($IsUpToDate.Count -gt 0) -and ($IsUpToDate -notcontains $false)) {
+                return $true
+            } else {
+                return $false
+            }
+        }
+    
+        _RegistryKeyValue {
+            Write-Verbose "Using registry detection"
+        }
+    
+        _FileVersion {
+            Write-Verbose "Using file version detection"
+        }
+    
+        _EmbeddedControllerVersion {
+            Write-Verbose "Using embedded controller version detection"
+    
+        }
+    
+        default {
+            Write-Verbose "Unsupported detection method: $($packageXML.Package.DetectInstall.ChildNodes.Name)"
+        }
+    }
+}
+
 function Install-BiosUpdate {
     [CmdletBinding()]
     Param (
@@ -470,6 +536,7 @@ function Get-LSUpdate {
             'Extracter'    = $packageXML.Package
             'Installer'    = [PackageInstallInfo]::new($packageXML.Package, $packageURL.category)
             'IsApplicable' = Resolve-XMLDependencies -PackageID $packageXML.Package.id -XML $packageXML.Package.Dependencies -FailUnsupportedDependencies:$FailUnsupportedDependencies -DebugLogFile $DebugLogFile
+            'IsInstalled'  = Test-PackageInstalled -XML $packageXML.Package.DetectInstall
         }
 
         if ($All -or $packageObject.IsApplicable) {
