@@ -304,7 +304,7 @@ function Test-PackageInstalled {
         $XML
     )
 
-    switch ($packageXML.Package.DetectInstall.ChildNodes.Name) {
+    switch ($XML.ChildNodes.Name) {
         _Driver {
             Write-Verbose "Using driver detection"
 
