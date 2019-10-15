@@ -304,6 +304,9 @@ function Test-PackageInstalled {
         $XML
     )
 
+    # unsure if multiple hardware ids will match, but let's assume so, so create an array
+    $IsUpToDate = @()
+
     switch ($XML.ChildNodes.Name) {
         _Driver {
             Write-Verbose "Using driver detection"
@@ -318,8 +321,6 @@ function Test-PackageInstalled {
             # Convert to semvar to do comparisons later
             $XMLHWVER = [version]$XMLHWVER_2.Substring(0,$XMLHWVER_2.Length-1)
 
-            # unsure if multiple hardware ids will match, but let's assume so, so create an array
-            $IsUpToDate = @()
             foreach($hwid in $XMLHWID) {
                 Write-Verbose "Searching for $($hwid.InnerText)"
                 if($pnp = Get-PnpDevice | Where-Object HardwareID -eq $hwid.InnerText) {
@@ -336,17 +337,27 @@ function Test-PackageInstalled {
                     }
                 }
             }
-
-            # if at least one returns false, assume it can be updated
-            if(($IsUpToDate.Count -gt 0) -and ($IsUpToDate -notcontains $false)) {
-                return $true
-            } else {
-                return $false
-            }
         }
     
         _RegistryKeyValue {
             Write-Verbose "Using registry detection"
+    
+            $xmlver_2 = $XML._RegistryKeyValue.Version
+            # Remove caret from end of version
+            # Convert to semvar to do comparisons later
+            $xmlver = [version]$xmlver_2.Substring(0,$xmlver_2.Length-1)
+    
+            Write-Verbose "Searching for $($XML._RegistryKeyValue.Key)"
+            if($regver = [version](Get-ItemPropertyValue -Path "Registry::$($XML._RegistryKeyValue.Key)" -Name "Version" -ErrorAction SilentlyContinue)) {
+                Write-Verbose "Checking if Registry Version ($regver) is greater than or equal to XML Version ($xmlver)"
+                if($regver -ge $xmlver) {
+                    $IsUpToDate += $true
+                } else {
+                    $IsUpToDate += $false
+                }
+            } else {
+                Write-Verbose "$($XML._RegistryKeyValue.Key) does not exist."
+            }
         }
     
         _FileVersion {
@@ -361,6 +372,13 @@ function Test-PackageInstalled {
         default {
             Write-Verbose "Unsupported detection method: $($packageXML.Package.DetectInstall.ChildNodes.Name)"
         }
+    }
+
+    # if at least one returns false, assume it can be updated
+    if(($IsUpToDate.Count -gt 0) -and ($IsUpToDate -notcontains $false)) {
+        return $true
+    } else {
+        return $false
     }
 }
 
