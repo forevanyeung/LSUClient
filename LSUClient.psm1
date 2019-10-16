@@ -310,30 +310,32 @@ function Test-PackageInstalled {
     switch ($XML.ChildNodes.Name) {
         _Driver {
             Write-Verbose "Using driver detection"
-
+    
             $XMLHWID = $XML._Driver.HardwareID
             $XMLHWVER_2 = $XML._Driver.Version
-
+    
             Write-Debug "XML Hardware ID is $XMLHWID"
             Write-Debug "XML Hardware Version is $XMLHWVER_2"
-
+    
             # Remove caret from end of version
             # Convert to semvar to do comparisons later
             $XMLHWVER = [version]$XMLHWVER_2.Substring(0,$XMLHWVER_2.Length-1)
-
+    
             foreach($hwid in $XMLHWID) {
                 Write-Verbose "Searching for $($hwid.InnerText)"
                 if($pnp = Get-PnpDevice | Where-Object HardwareID -eq $hwid.InnerText) {
                     Write-Verbose "Matched PNP device. $pnp"
-                    $pnpver = $pnp | Get-PnpDeviceProperty -KeyName DEVPKEY_Device_DriverVersion | Select-Object -expandproperty data
-                    # convert to semvar
-                    $pnpver = [version] $pnpver
-
-                    Write-Verbose "Checking if PNP Version ($pnpver) is greater than or equal to XML Version ($XMLHWVER)"
-                    if($pnpver -ge $XMLHWVER) {
-                        $IsUpToDate += $true
-                    } else {
-                        $IsUpToDate += $false
+                    $pnpver = $pnp | Get-PnpDeviceProperty -KeyName DEVPKEY_Device_DriverVersion
+                    foreach($version in $pnpver) {
+                        # convert to semvar
+                        $version = [version] $version.data
+    
+                        Write-Verbose "Checking if PNP Version ($version) is greater than or equal to XML Version ($XMLHWVER)"
+                        if($version -ge $XMLHWVER) {
+                            $IsUpToDate += $true
+                        } else {
+                            $IsUpToDate += $false
+                        }
                     }
                 }
             }
