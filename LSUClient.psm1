@@ -362,11 +362,39 @@ function Test-PackageInstalled {
     
         _FileVersion {
             Write-Verbose "Using file version detection"
+    
+            $XMLFileVer_2 = $XML._FileVersion.Version
+            # Remove caret from end of version
+            # Convert to semvar to do comparisons later
+            $XMLFileVer = [version]$XMLFileVer_2.Substring(0,$XMLFileVer_2.Length-1)
+    
+            $path = [System.Environment]::ExpandEnvironmentVariables($XML._FileVersion.File)
+            $filever = (Get-ItemProperty -LiteralPath $path).VersionInfo.FileVersion
+    
+            Write-Verbose "Checking if File Version ($filever) is greater than or equal to XML Version ($XMLFileVer)"
+            if($filever -ge $XMLFileVer) {
+                $IsUpToDate += $true
+            } else {
+                $IsUpToDate += $false
+            }
         }
     
         _EmbeddedControllerVersion {
             Write-Verbose "Using embedded controller version detection"
+            $XMLECver_2 = $XML._EmbeddedControllerVersion.Version
+            # Remove caret from end of version
+            # Convert to semvar to do comparisons later
+            $XMLECver = [version]$XMLECver_2.Substring(0,$XMLECver_2.Length-1)
     
+            $Win32_Bios = Get-WmiObject Win32_Bios
+            $ECver = New-Object System.Version($Win32_Bios.EmbeddedControllerMajorVersion, $Win32_Bios.EmbeddedControllerMinorVersion)
+    
+            Write-Verbose "Checking if Embedded Controller version ($ECver) is greater than or equal to XML Version ($XMLECver)"
+            if($ECver -ge $XMLECver) {
+                $IsUpToDate += $true
+            } else {
+                $IsUpToDate += $false
+            }
         }
     
         default {
